@@ -433,6 +433,6 @@ for sec in sections:
                          drawedges=True, ticks=bounds)
         cb.set_label('W/m$^2$/K')
     pl.savefig('/home/shofer/Documents/repos/cloud-radiative-kernels/SW_' + sec +
-               '_cld_fbk_example_maps.png', bbox_inches='tight')
+               '_cld_fbk_example_maps.png', bbox_inches='tight')  # SH
 
     pl.show()
