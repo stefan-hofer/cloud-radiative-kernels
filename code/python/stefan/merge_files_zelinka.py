@@ -20,6 +20,7 @@ for dir in all_dirs:
         else:
             save_str = dir + sorted(glob.glob(dir + '*.cam.h0*.nc')
                                     )[-1].split('/')[-1][:-11] + '_' + var + '.nc'
+        var_list = [var, 'time_bnds']
 
         print('Saving the file: {}'.format(save_str))
         ds[var].to_netcdf(save_str)

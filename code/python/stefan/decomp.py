@@ -36,12 +36,15 @@ Zelinka, M. D., C. Zhou, and S. A. Klein, 2016: Insights from a Refined Decompos
 
 # IMPORT STUFF:
 # =====================
+
 import cdms2 as cdms
 import cdutil
 import MV2 as MV
 import numpy as np
 import pylab as pl
 import matplotlib as mpl
+
+import xarray as xr
 
 ###########################################################################
 # HELPFUL FUNCTIONS FOLLOW
@@ -210,7 +213,14 @@ def KT_decomposition_4D(c1, c2, Klw, Ksw):
 # Part 1: Read in data, regrid, compute anomalies, map kernels to lat/lon
 # This is identical to the first part of apply_cloud_kernels_v2.py
 ###########################################################################
-direc = '/home/shofer/Documents/repos/cloud-radiative-kernels/data/'  # SH
+# direc = '/home/shofer/Documents/repos/cloud-radiative-kernels/data/'  # SH
+direc = '/projects/NS9252K/noresm/cases/WP4_shofer/kernels/cloud-radiative-kernels/data/'
+
+# This is where all the model data lies
+main_dir = '/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.001_global/atm/hist/COSP/'
+subdirs = ['PI/', 'HIST_0/',  'HIST_1/',  'HIST_2/',  'SSP_0/',  'SSP_1/']
+all_dirs = [main_dir + s for s in subdirs]
+
 
 # Load in the Zelinka et al 2012 kernels:
 f = cdms.open(direc + 'cloud_kernels2.nc')
@@ -235,13 +245,43 @@ grid = cdms.createGenericGrid(lats, lons)
 
 # Load in clisccp from control and perturbed simulation
 f = cdms.open(
-    direc + 'clisccp_cfMon_MPI-ESM-LR_amip_r1i1p1_197901-198112.nc', 'r')
-clisccp1 = f('clisccp')
+    all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.001_global.cam.h0.1399_FISCCP1.nc', 'r')
+clisccp1 = f('FISCCP1_COSP')
 f.close()
 f = cdms.open(
-    direc + 'clisccp_cfMon_MPI-ESM-LR_amipFuture_r1i1p1_197901-198112.nc', 'r')
-clisccp2 = f('clisccp')
+    all_dirs[1] + 'n.n202.NHISTfrc2.f09_tn14.historical.001_global.cam.h0.1899_FISCCP1.nc', 'r')
+clisccp2 = f('FISCCP1_COSP')
 f.close()
+
+# Set time bounds, otherwise ANNUALCYCLE does not work
+# shofer
+cdutil.setTimeBoundsMonthly(clisccp1)
+cdutil.setTimeBoundsMonthly(clisccp2)
+
+# CESM cosp output default is ctp,tau,lat,lon - swap these axes to tau,ctp,lat,lon
+clisccp1_n = cdms.asVariable(np.transpose(clisccp1, (0, 2, 1, 3, 4)))
+clisccp2_n = cdms.asVariable(np.transpose(clisccp2, (0, 2, 1, 3, 4)))
+
+# Get axis coordinate names etc
+axis_list = clisccp1.getAxisList()
+axis_list_two = clisccp2.getAxisList()
+# Order to reorganise axis coordinated
+order = [0, 2, 1, 3, 4]
+# Create reordered axis list
+# tp,tau,lat,lon - swap these axes to tau,ctp,lat,lon
+new_axis_list = [axis_list[i] for i in order]
+
+clisccp1 = clisccp1_n
+clisccp2 = clisccp2_n
+
+# Reassign new axis labels
+clisccp1.setAxisList(new_axis_list)
+try:
+    clisccp2.setAxisList(new_axis_list)
+except:
+    new_axis_list = [axis_list_two[i] for i in order]
+    clisccp2.setAxisList(new_axis_list)
+
 
 # Make sure clisccp is in percent
 sumclisccp1 = MV.sum(MV.sum(clisccp1, 2), 1)
@@ -262,14 +302,26 @@ del(clisccp1, clisccp2)
 anomclisccp = avgclisccp2 - avgclisccp1
 
 # Compute clear-sky surface albedo
+# NorESM2 variables "FSDSC", "FSNSC" (downwelling sw clear, net sw clear)
+# Load in rsuscs, rsdscs
+# rsuscs: surface upwelling shortwave flux in air assuming clear sky
+# rsdscs: surface downwelling shortwave flux in air assuming clear sky
+
 f = cdms.open(
-    direc + 'rsuscs_Amon_MPI-ESM-LR_amip_r1i1p1_197901-198112.nc', 'r')
-rsuscs1 = f('rsuscs')
+    all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.001_global.cam.h0_FSDSC.nc', 'r')
+rsdscs1 = f('FSDSC')
 f.close()
 f = cdms.open(
-    direc + 'rsdscs_Amon_MPI-ESM-LR_amip_r1i1p1_197901-198112.nc', 'r')
-rsdscs1 = f('rsdscs')
+    all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.001_global.cam._FSNSC.nc', 'r')
+clearsky_net = f('FSNSC')
 f.close()
+
+# Otherwise ANNUALCYCLE does not work
+cdutil.setTimeBoundsMonthly(rsdscs1)
+cdutil.setTimeBoundsMonthly(clearsky_net)
+
+rsuscs1 = rsdscs1 - clearsky_net  # up = down - net (clear sky)
+
 
 albcs1 = rsuscs1 / rsdscs1
 avgalbcs1 = cdutil.ANNUALCYCLE.climatology(albcs1)  # (12, 90, 144)
@@ -279,14 +331,18 @@ avgalbcs1 = MV.where(avgalbcs1 < 0., 0, avgalbcs1)
 del(rsuscs1, rsdscs1, albcs1)
 
 # Load surface air temperature
-f = cdms.open(direc + 'tas_Amon_MPI-ESM-LR_amip_r1i1p1_197901-198112.nc', 'r')
-tas1 = f('tas')
+f = cdms.open(
+    all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.001_global.cam.h0.1399_TS.nc', 'r')
+tas1 = f('TS')
 f.close()
 f = cdms.open(
-    direc + 'tas_Amon_MPI-ESM-LR_amipFuture_r1i1p1_197901-198112.nc', 'r')
-tas2 = f('tas')
+    all_dirs[1] + 'n.n202.NHISTfrc2.f09_tn14.historical.001_global.cam.h0.1899_TS.nc', 'r')
+tas2 = f('TS')
 f.close()
 
+# Otherwise ANNUALCYCLE does not work
+cdutil.setTimeBoundsMonthly(tas1)
+cdutil.setTimeBoundsMonthly(tas2)
 # Compute climatological annual cycle:
 avgtas1 = cdutil.ANNUALCYCLE.climatology(tas1)  # (12, 90, 144)
 avgtas2 = cdutil.ANNUALCYCLE.climatology(tas2)  # (12, 90, 144)
@@ -320,6 +376,8 @@ night = np.where(sundown == 0)
 # Compute clisccp anomalies normalized by global mean delta tas
 anomclisccp = avganomclisccp_grd / avgdtas
 
+
+# END IMPORTED FROM RYAN
 ###########################################################################
 # Part 2: Compute cloud feedbacks and their breakdown into components
 ###########################################################################
@@ -374,65 +432,112 @@ for sec in sections:
     AX = avgalbcs1_grd[0, :].getAxisList()
 
     # Plot Maps
-    from mpl_toolkits.basemap import Basemap
+    # from mpl_toolkits.basemap import Basemap
     lons = avgalbcs1_grd.getLongitude()[:]
     lats = avgalbcs1_grd.getLatitude()[:]
     LON, LAT = np.meshgrid(lons, lats)
 
-    # LW
-    # this creates and increases the figure size
-    fig = pl.figure(figsize=(18, 12))
-    pl.suptitle(sec + ' CTP bins', fontsize=16, y=0.95)
-    bounds = np.arange(-18, 20, 2)
-    cmap = pl.cm.RdBu_r
-    # This is only needed for norm if colorbar is extended
-    bounds2 = np.append(np.append(-500, bounds), 500)
-    # make sure the colors vary linearly even if the desired color boundaries are at varied intervals
-    norm = mpl.colors.BoundaryNorm(bounds2, cmap.N)
-    names = ['LWcld_tot', 'LWcld_amt', 'LWcld_alt', 'LWcld_tau', 'LWcld_err']
-    for n, name in enumerate(names):
-        pl.subplot(3, 2, n + 1)
-        m = Basemap(projection='robin', lon_0=210)
-        m.drawmapboundary(fill_color='0.3')
-        exec('DATA = MV.average(' + name + ',0)')
-        im1 = m.contourf(LON, LAT, DATA, bounds, shading='flat',
-                         cmap=cmap, norm=norm, latlon=True, extend='both')
-        m.drawcoastlines(linewidth=1.5)
-        DATA.setAxisList(AX)
-        avgDATA = cdutil.averager(DATA, axis='xy', weights='weighted')
-        pl.title(name + ' [' + str(np.round(avgDATA, 3)) + ']', fontsize=14)
-        cb = pl.colorbar(im1, orientation='vertical',
-                         drawedges=True, ticks=bounds)
-        cb.set_label('W/m$^2$/K')
-    pl.savefig('/home/shofer/Documents/repos/cloud-radiative-kernels/LW_' + sec +
-               '_cld_fbk_example_maps.png', bbox_inches='tight')  # SH
+    names_SW = ['SWcld_tot', 'SWcld_amt',
+                'SWcld_alt', 'SWcld_tau', 'SWcld_err']
+    names_LW = ['LWcld_tot', 'LWcld_amt',
+                'LWcld_alt', 'LWcld_tau', 'LWcld_err']
+    LW_feedbacks = [LWcld_tot, LWcld_amt, LWcld_alt, LWcld_tau, LWcld_err]
+    SW_feedbacks = [SWcld_tot, SWcld_amt, SWcld_alt, SWcld_tau, SWcld_err]
 
-    # SW
-    # this creates and increases the figure size
-    fig = pl.figure(figsize=(18, 12))
-    pl.suptitle(sec + ' CTP bins', fontsize=16, y=0.95)
-    bounds = np.arange(-18, 20, 2)
-    cmap = pl.cm.RdBu_r
-    # This is only needed for norm if colorbar is extended
-    bounds2 = np.append(np.append(-500, bounds), 500)
-    # make sure the colors vary linearly even if the desired color boundaries are at varied intervals
-    norm = mpl.colors.BoundaryNorm(bounds2, cmap.N)
-    names = ['SWcld_tot', 'SWcld_amt', 'SWcld_alt', 'SWcld_tau', 'SWcld_err']
-    for n, name in enumerate(names):
-        pl.subplot(3, 2, n + 1)
-        m = Basemap(projection='robin', lon_0=210)
-        m.drawmapboundary(fill_color='0.3')
-        exec('DATA = MV.average(' + name + ',0)')
-        im1 = m.contourf(LON, LAT, DATA, bounds, shading='flat',
-                         cmap=cmap, norm=norm, latlon=True, extend='both')
-        m.drawcoastlines(linewidth=1.5)
-        DATA.setAxisList(AX)
-        avgDATA = cdutil.averager(DATA, axis='xy', weights='weighted')
-        pl.title(name + ' [' + str(np.round(avgDATA, 3)) + ']', fontsize=14)
-        cb = pl.colorbar(im1, orientation='vertical',
-                         drawedges=True, ticks=bounds)
-        cb.set_label('W/m$^2$/K')
-    pl.savefig('/home/shofer/Documents/repos/cloud-radiative-kernels/SW_' + sec +
-               '_cld_fbk_example_maps.png', bbox_inches='tight')  # SH
+    list_LW, list_SW = [], []
 
-    pl.show()
+    for i in range(len(LW_feedbacks)):
+        da_lw = xr.DataArray.from_cdms2(LW_feedbacks[i])
+        da_sw = xr.DataArray.from_cdms2(SW_feedbacks[i])
+
+        da_lw.name = names_LW[i]
+        da_sw.name = names_SW[i]
+
+        da_lw = da_lw.rename(
+            {'axis_0': 'month', 'axis_1': 'lat', 'axis_2': 'lon'})
+        da_sw = da_sw.rename(
+            {'axis_0': 'month', 'axis_1': 'lat', 'axis_2': 'lon'})
+
+        da_lw['lon'] = lons
+        da_sw['lon'] = lons
+
+        da_lw['lat'] = lats
+        da_sw['lat'] = lats
+
+        da_lw['month'] = np.arange(1, 13, 1)
+        da_sw['month'] = np.arange(1, 13, 1)
+
+        list_LW.append(da_lw)
+        list_SW.append(da_sw)
+
+    ds_lw = xr.merge(list_LW)
+    ds_sw = xr.merge(list_SW)
+    # Directory to save files for _001 simulation
+    # os.mkdir('/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.001_global/atm/hist/COSP/cloud_feedbacks')
+    save_dir = '/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.001_global/atm/hist/COSP/cloud_feedbacks/'
+    ds_lw = ds_lw.assign_coords({'year': 1899})
+    ds_sw = ds_sw.assign_coords({'year': 1899})
+    ds_lw.to_netcdf(
+        save_dir + 'LW_cloud_feedbacks_' + sec + '_HIST_0.nc')
+    ds_sw.to_netcdf(
+        save_dir + 'SW_cloud_feedbacks_' + sec + '_HIST_0.nc')
+
+    #
+    # # LW
+    # # this creates and increases the figure size
+    # fig = pl.figure(figsize=(18, 12))
+    # pl.suptitle(sec + ' CTP bins', fontsize=16, y=0.95)
+    # bounds = np.arange(-18, 20, 2)
+    # cmap = pl.cm.RdBu_r
+    # # This is only needed for norm if colorbar is extended
+    # bounds2 = np.append(np.append(-500, bounds), 500)
+    # # make sure the colors vary linearly even if the desired color boundaries are at varied intervals
+    # norm = mpl.colors.BoundaryNorm(bounds2, cmap.N)
+    # names = ['LWcld_tot', 'LWcld_amt', 'LWcld_alt', 'LWcld_tau', 'LWcld_err']
+    #
+    # for n, name in enumerate(names):
+    #     pl.subplot(3, 2, n + 1)
+    #     m = Basemap(projection='robin', lon_0=210)
+    #     m.drawmapboundary(fill_color='0.3')
+    #     exec('DATA = MV.average(' + name + ',0)')
+    #     im1 = m.contourf(LON, LAT, DATA, bounds, shading='flat',
+    #                      cmap=cmap, norm=norm, latlon=True, extend='both')
+    #     m.drawcoastlines(linewidth=1.5)
+    #     DATA.setAxisList(AX)
+    #     avgDATA = cdutil.averager(DATA, axis='xy', weights='weighted')
+    #     pl.title(name + ' [' + str(np.round(avgDATA, 3)) + ']', fontsize=14)
+    #     cb = pl.colorbar(im1, orientation='vertical',
+    #                      drawedges=True, ticks=bounds)
+    #     cb.set_label('W/m$^2$/K')
+    # # pl.savefig('/home/shofer/Documents/repos/cloud-radiative-kernels/LW_' + sec +
+    # #           '_cld_fbk_example_maps.png', bbox_inches = 'tight')  # SH
+    #
+    # # SW
+    # # this creates and increases the figure size
+    # fig = pl.figure(figsize=(18, 12))
+    # pl.suptitle(sec + ' CTP bins', fontsize=16, y=0.95)
+    # bounds = np.arange(-18, 20, 2)
+    # cmap = pl.cm.RdBu_r
+    # # This is only needed for norm if colorbar is extended
+    # bounds2 = np.append(np.append(-500, bounds), 500)
+    # # make sure the colors vary linearly even if the desired color boundaries are at varied intervals
+    # norm = mpl.colors.BoundaryNorm(bounds2, cmap.N)
+    # names = ['SWcld_tot', 'SWcld_amt', 'SWcld_alt', 'SWcld_tau', 'SWcld_err']
+    # for n, name in enumerate(names):
+    #     pl.subplot(3, 2, n + 1)
+    #     m = Basemap(projection='robin', lon_0=210)
+    #     m.drawmapboundary(fill_color='0.3')
+    #     exec('DATA = MV.average(' + name + ',0)')
+    #     im1 = m.contourf(LON, LAT, DATA, bounds, shading='flat',
+    #                      cmap=cmap, norm=norm, latlon=True, extend='both')
+    #     m.drawcoastlines(linewidth=1.5)
+    #     DATA.setAxisList(AX)
+    #     avgDATA = cdutil.averager(DATA, axis='xy', weights='weighted')
+    #     pl.title(name + ' [' + str(np.round(avgDATA, 3)) + ']', fontsize=14)
+    #     cb = pl.colorbar(im1, orientation='vertical',
+    #                      drawedges=True, ticks=bounds)
+    #     cb.set_label('W/m$^2$/K')
+    # pl.savefig('/home/shofer/Documents/repos/cloud-radiative-kernels/SW_' + sec +
+    #           '_cld_fbk_example_maps.png', bbox_inches='tight')  # SH
+
+    # pl.show()
