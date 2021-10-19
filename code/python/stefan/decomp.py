@@ -43,6 +43,7 @@ import MV2 as MV
 import numpy as np
 import pylab as pl
 import matplotlib as mpl
+import glob
 
 import xarray as xr
 
@@ -220,267 +221,266 @@ direc = '/projects/NS9252K/noresm/cases/WP4_shofer/kernels/cloud-radiative-kerne
 main_dir = '/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.001_global/atm/hist/COSP/'
 subdirs = ['PI/', 'HIST_0/',  'HIST_1/',  'HIST_2/',  'SSP_0/',  'SSP_1/']
 all_dirs = [main_dir + s for s in subdirs]
+years = [1899, 1949, 1999, 2049, 2100]
 
+for i in range(1, 6):
 
-# Load in the Zelinka et al 2012 kernels:
-f = cdms.open(direc + 'cloud_kernels2.nc')
-LWkernel = f('LWkernel')
-SWkernel = f('SWkernel')
-f.close()
+    # Load in the Zelinka et al 2012 kernels:
+    f = cdms.open(direc + 'cloud_kernels2.nc')
+    LWkernel = f('LWkernel')
+    SWkernel = f('SWkernel')
+    f.close()
 
-LWkernel = MV.masked_where(np.isnan(LWkernel), LWkernel)
-SWkernel = MV.masked_where(np.isnan(SWkernel), SWkernel)
+    LWkernel = MV.masked_where(np.isnan(LWkernel), LWkernel)
+    SWkernel = MV.masked_where(np.isnan(SWkernel), SWkernel)
 
-# the clear-sky albedos over which the kernel is computed
-albcs = np.arange(0.0, 1.5, 0.5)
+    # the clear-sky albedos over which the kernel is computed
+    albcs = np.arange(0.0, 1.5, 0.5)
 
-# LW kernel does not depend on albcs, just repeat the final dimension over longitudes:
-LWkernel_map = np.tile(np.tile(
-    LWkernel[:, :, :, :, 0], (1, 1, 1, 1, 1)), (144, 1, 1, 1, 1))(order=[1, 2, 3, 4, 0])
+    # LW kernel does not depend on albcs, just repeat the final dimension over longitudes:
+    LWkernel_map = np.tile(np.tile(
+        LWkernel[:, :, :, :, 0], (1, 1, 1, 1, 1)), (144, 1, 1, 1, 1))(order=[1, 2, 3, 4, 0])
 
-# Define the cloud kernel axis attributes
-lats = LWkernel.getLatitude()[:]
-lons = np.arange(1.25, 360, 2.5)
-grid = cdms.createGenericGrid(lats, lons)
+    # Define the cloud kernel axis attributes
+    lats = LWkernel.getLatitude()[:]
+    lons = np.arange(1.25, 360, 2.5)
+    grid = cdms.createGenericGrid(lats, lons)
 
-# Load in clisccp from control and perturbed simulation
-f = cdms.open(
-    all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.001_global.cam.h0.1399_FISCCP1.nc', 'r')
-clisccp1 = f('FISCCP1_COSP')
-f.close()
-f = cdms.open(
-    all_dirs[1] + 'n.n202.NHISTfrc2.f09_tn14.historical.001_global.cam.h0.1899_FISCCP1.nc', 'r')
-clisccp2 = f('FISCCP1_COSP')
-f.close()
+    # Load in clisccp from control and perturbed simulation
+    f = cdms.open(
+        all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.001_global.cam.h0.1399_FISCCP1.nc', 'r')
+    clisccp1 = f('FISCCP1_COSP')
+    f.close()
+    f = cdms.open(
+        glob.glob(all_dirs[i] + '*_FISCCP1.nc')[0], 'r')
+    clisccp2 = f('FISCCP1_COSP')
+    f.close()
 
-# Set time bounds, otherwise ANNUALCYCLE does not work
-# shofer
-cdutil.setTimeBoundsMonthly(clisccp1)
-cdutil.setTimeBoundsMonthly(clisccp2)
+    # Set time bounds, otherwise ANNUALCYCLE does not work
+    # shofer
+    cdutil.setTimeBoundsMonthly(clisccp1)
+    cdutil.setTimeBoundsMonthly(clisccp2)
 
-# CESM cosp output default is ctp,tau,lat,lon - swap these axes to tau,ctp,lat,lon
-clisccp1_n = cdms.asVariable(np.transpose(clisccp1, (0, 2, 1, 3, 4)))
-clisccp2_n = cdms.asVariable(np.transpose(clisccp2, (0, 2, 1, 3, 4)))
+    # CESM cosp output default is ctp,tau,lat,lon - swap these axes to tau,ctp,lat,lon
+    clisccp1_n = cdms.asVariable(np.transpose(clisccp1, (0, 2, 1, 3, 4)))
+    clisccp2_n = cdms.asVariable(np.transpose(clisccp2, (0, 2, 1, 3, 4)))
 
-# Get axis coordinate names etc
-axis_list = clisccp1.getAxisList()
-axis_list_two = clisccp2.getAxisList()
-# Order to reorganise axis coordinated
-order = [0, 2, 1, 3, 4]
-# Create reordered axis list
-# tp,tau,lat,lon - swap these axes to tau,ctp,lat,lon
-new_axis_list = [axis_list[i] for i in order]
+    # Get axis coordinate names etc
+    axis_list = clisccp1.getAxisList()
+    axis_list_two = clisccp2.getAxisList()
+    # Order to reorganise axis coordinated
+    order = [0, 2, 1, 3, 4]
+    # Create reordered axis list
+    # tp,tau,lat,lon - swap these axes to tau,ctp,lat,lon
+    new_axis_list = [axis_list[i] for i in order]
 
-clisccp1 = clisccp1_n
-clisccp2 = clisccp2_n
+    clisccp1 = clisccp1_n
+    clisccp2 = clisccp2_n
 
-# Reassign new axis labels
-clisccp1.setAxisList(new_axis_list)
-try:
-    clisccp2.setAxisList(new_axis_list)
-except:
-    new_axis_list = [axis_list_two[i] for i in order]
-    clisccp2.setAxisList(new_axis_list)
+    # Reassign new axis labels
+    clisccp1.setAxisList(new_axis_list)
+    try:
+        clisccp2.setAxisList(new_axis_list)
+    except:
+        new_axis_list = [axis_list_two[i] for i in order]
+        clisccp2.setAxisList(new_axis_list)
 
+    # Make sure clisccp is in percent
+    sumclisccp1 = MV.sum(MV.sum(clisccp1, 2), 1)
+    sumclisccp2 = MV.sum(MV.sum(clisccp2, 2), 1)
+    if np.max(sumclisccp1) <= 1.:
+        clisccp1 = clisccp1 * 100.
+    if np.max(sumclisccp2) <= 1.:
+        clisccp2 = clisccp2 * 100.
 
-# Make sure clisccp is in percent
-sumclisccp1 = MV.sum(MV.sum(clisccp1, 2), 1)
-sumclisccp2 = MV.sum(MV.sum(clisccp2, 2), 1)
-if np.max(sumclisccp1) <= 1.:
-    clisccp1 = clisccp1 * 100.
-if np.max(sumclisccp2) <= 1.:
-    clisccp2 = clisccp2 * 100.
+    # Compute climatological annual cycle:
+    avgclisccp1 = cdutil.ANNUALCYCLE.climatology(
+        clisccp1)  # (12, TAU, CTP, LAT, LON)
+    avgclisccp2 = cdutil.ANNUALCYCLE.climatology(
+        clisccp2)  # (12, TAU, CTP, LAT, LON)
+    del(clisccp1, clisccp2)
 
-# Compute climatological annual cycle:
-avgclisccp1 = cdutil.ANNUALCYCLE.climatology(
-    clisccp1)  # (12, TAU, CTP, LAT, LON)
-avgclisccp2 = cdutil.ANNUALCYCLE.climatology(
-    clisccp2)  # (12, TAU, CTP, LAT, LON)
-del(clisccp1, clisccp2)
+    # Compute clisccp anomalies
+    anomclisccp = avgclisccp2 - avgclisccp1
 
-# Compute clisccp anomalies
-anomclisccp = avgclisccp2 - avgclisccp1
+    # Compute clear-sky surface albedo
+    # NorESM2 variables "FSDSC", "FSNSC" (downwelling sw clear, net sw clear)
+    # Load in rsuscs, rsdscs
+    # rsuscs: surface upwelling shortwave flux in air assuming clear sky
+    # rsdscs: surface downwelling shortwave flux in air assuming clear sky
 
-# Compute clear-sky surface albedo
-# NorESM2 variables "FSDSC", "FSNSC" (downwelling sw clear, net sw clear)
-# Load in rsuscs, rsdscs
-# rsuscs: surface upwelling shortwave flux in air assuming clear sky
-# rsdscs: surface downwelling shortwave flux in air assuming clear sky
+    f = cdms.open(
+        glob.glob(all_dirs[0] + '*_FSDSC.nc')[0], 'r')
+    rsdscs1 = f('FSDSC')
+    f.close()
+    f = cdms.open(
+        glob.glob(all_dirs[0] + '*_FSNSC.nc')[0], 'r')
+    clearsky_net = f('FSNSC')
+    f.close()
 
-f = cdms.open(
-    all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.001_global.cam.h0_FSDSC.nc', 'r')
-rsdscs1 = f('FSDSC')
-f.close()
-f = cdms.open(
-    all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.001_global.cam._FSNSC.nc', 'r')
-clearsky_net = f('FSNSC')
-f.close()
+    # Otherwise ANNUALCYCLE does not work
+    cdutil.setTimeBoundsMonthly(rsdscs1)
+    cdutil.setTimeBoundsMonthly(clearsky_net)
 
-# Otherwise ANNUALCYCLE does not work
-cdutil.setTimeBoundsMonthly(rsdscs1)
-cdutil.setTimeBoundsMonthly(clearsky_net)
+    rsuscs1 = rsdscs1 - clearsky_net  # up = down - net (clear sky)
 
-rsuscs1 = rsdscs1 - clearsky_net  # up = down - net (clear sky)
+    albcs1 = rsuscs1 / rsdscs1
+    avgalbcs1 = cdutil.ANNUALCYCLE.climatology(albcs1)  # (12, 90, 144)
+    # where(condition, x, y) is x where condition is true, y otherwise
+    avgalbcs1 = MV.where(avgalbcs1 > 1., 1, avgalbcs1)
+    avgalbcs1 = MV.where(avgalbcs1 < 0., 0, avgalbcs1)
+    del(rsuscs1, rsdscs1, albcs1)
 
+    # Load surface air temperature
+    f = cdms.open(
+        all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.001_global.cam.h0_TREFHT.nc', 'r')
+    tas1 = f('TREFHT')
+    f.close()
+    f = cdms.open(
+        glob.glob(all_dirs[i] + '*_TREFHT.nc')[0], 'r')
+    tas2 = f('TREFHT')
+    f.close()
 
-albcs1 = rsuscs1 / rsdscs1
-avgalbcs1 = cdutil.ANNUALCYCLE.climatology(albcs1)  # (12, 90, 144)
-# where(condition, x, y) is x where condition is true, y otherwise
-avgalbcs1 = MV.where(avgalbcs1 > 1., 1, avgalbcs1)
-avgalbcs1 = MV.where(avgalbcs1 < 0., 0, avgalbcs1)
-del(rsuscs1, rsdscs1, albcs1)
+    # Otherwise ANNUALCYCLE does not work
+    cdutil.setTimeBoundsMonthly(tas1)
+    cdutil.setTimeBoundsMonthly(tas2)
+    # Compute climatological annual cycle:
+    avgtas1 = cdutil.ANNUALCYCLE.climatology(tas1)  # (12, 90, 144)
+    avgtas2 = cdutil.ANNUALCYCLE.climatology(tas2)  # (12, 90, 144)
+    del(tas1, tas2)
 
-# Load surface air temperature
-f = cdms.open(
-    all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.001_global.cam.h0.1399_TS.nc', 'r')
-tas1 = f('TS')
-f.close()
-f = cdms.open(
-    all_dirs[1] + 'n.n202.NHISTfrc2.f09_tn14.historical.001_global.cam.h0.1899_TS.nc', 'r')
-tas2 = f('TS')
-f.close()
+    # Compute global annual mean tas anomalies
+    anomtas = avgtas2 - avgtas1
+    avgdtas = cdutil.averager(MV.average(anomtas, axis=0),
+                              axis='xy', weights='weighted')  # (scalar)
 
-# Otherwise ANNUALCYCLE does not work
-cdutil.setTimeBoundsMonthly(tas1)
-cdutil.setTimeBoundsMonthly(tas2)
-# Compute climatological annual cycle:
-avgtas1 = cdutil.ANNUALCYCLE.climatology(tas1)  # (12, 90, 144)
-avgtas2 = cdutil.ANNUALCYCLE.climatology(tas2)  # (12, 90, 144)
-del(tas1, tas2)
+    # Regrid everything to the kernel grid:
+    avgalbcs1 = add_cyclic(avgalbcs1)
+    avgclisccp1 = add_cyclic(avgclisccp1)
+    avgclisccp2 = add_cyclic(avgclisccp2)
+    avganomclisccp = add_cyclic(anomclisccp)
+    avgalbcs1_grd = avgalbcs1.regrid(
+        grid, regridTool="esmf", regridMethod="linear")
+    avgclisccp1_grd = avgclisccp1.regrid(
+        grid, regridTool="esmf", regridMethod="linear")
+    avgclisccp2_grd = avgclisccp2.regrid(
+        grid, regridTool="esmf", regridMethod="linear")
+    avganomclisccp_grd = avganomclisccp.regrid(
+        grid, regridTool="esmf", regridMethod="linear")
 
-# Compute global annual mean tas anomalies
-anomtas = avgtas2 - avgtas1
-avgdtas = cdutil.averager(MV.average(anomtas, axis=0),
-                          axis='xy', weights='weighted')  # (scalar)
+    # Use control albcs to map SW kernel to appropriate longitudes
+    SWkernel_map = map_SWkern_to_lon(SWkernel, avgalbcs1_grd)
+    # The sun is down if every bin of the SW kernel is zero:
+    sundown = MV.sum(MV.sum(SWkernel_map, axis=2), axis=1)  # 12,90,144
+    night = np.where(sundown == 0)
 
-# Regrid everything to the kernel grid:
-avgalbcs1 = add_cyclic(avgalbcs1)
-avgclisccp1 = add_cyclic(avgclisccp1)
-avgclisccp2 = add_cyclic(avgclisccp2)
-avganomclisccp = add_cyclic(anomclisccp)
-avgalbcs1_grd = avgalbcs1.regrid(
-    grid, regridTool="esmf", regridMethod="linear")
-avgclisccp1_grd = avgclisccp1.regrid(
-    grid, regridTool="esmf", regridMethod="linear")
-avgclisccp2_grd = avgclisccp2.regrid(
-    grid, regridTool="esmf", regridMethod="linear")
-avganomclisccp_grd = avganomclisccp.regrid(
-    grid, regridTool="esmf", regridMethod="linear")
+    # Compute clisccp anomalies normalized by global mean delta tas
+    anomclisccp = avganomclisccp_grd / avgdtas
 
-# Use control albcs to map SW kernel to appropriate longitudes
-SWkernel_map = map_SWkern_to_lon(SWkernel, avgalbcs1_grd)
-# The sun is down if every bin of the SW kernel is zero:
-sundown = MV.sum(MV.sum(SWkernel_map, axis=2), axis=1)  # 12,90,144
-night = np.where(sundown == 0)
+    # END IMPORTED FROM RYAN
+    ###########################################################################
+    # Part 2: Compute cloud feedbacks and their breakdown into components
+    ###########################################################################
 
-# Compute clisccp anomalies normalized by global mean delta tas
-anomclisccp = avganomclisccp_grd / avgdtas
+    # Define a python dictionary containing the sections of the histogram to consider
+    # These are the same as in Zelinka et al, GRL, 2016
+    sections = ['ALL', 'HI680', 'LO680']
+    Psections = [slice(0, 7), slice(2, 7), slice(0, 2)]
+    sec_dic = dict(zip(sections, Psections))
+    for sec in sections:
+        print('Using ' + sec + ' CTP bins')
+        choose = sec_dic[sec]
+        LC = len(np.ones(100)[choose])
 
+        # Preallocation of arrays:
+        LWcld_tot = nanarray((12, 90, 144))
+        LWcld_amt = nanarray((12, 90, 144))
+        LWcld_alt = nanarray((12, 90, 144))
+        LWcld_tau = nanarray((12, 90, 144))
+        LWcld_err = nanarray((12, 90, 144))
+        SWcld_tot = nanarray((12, 90, 144))
+        SWcld_amt = nanarray((12, 90, 144))
+        SWcld_alt = nanarray((12, 90, 144))
+        SWcld_tau = nanarray((12, 90, 144))
+        SWcld_err = nanarray((12, 90, 144))
+        dc_star = nanarray((12, 7, LC, 90, 144))
+        dc_prop = nanarray((12, 7, LC, 90, 144))
 
-# END IMPORTED FROM RYAN
-###########################################################################
-# Part 2: Compute cloud feedbacks and their breakdown into components
-###########################################################################
+        for mm in range(12):
+            dcld_dT = anomclisccp[mm, :, choose, :]
 
-# Define a python dictionary containing the sections of the histogram to consider
-# These are the same as in Zelinka et al, GRL, 2016
-sections = ['ALL', 'HI680', 'LO680']
-Psections = [slice(0, 7), slice(2, 7), slice(0, 2)]
-sec_dic = dict(zip(sections, Psections))
-for sec in sections:
-    print('Using ' + sec + ' CTP bins')
-    choose = sec_dic[sec]
-    LC = len(np.ones(100)[choose])
+            c1 = avgclisccp1_grd[mm, :, choose, :]
+            c2 = c1 + dcld_dT
+            Klw = LWkernel_map[mm, :, choose, :]
+            Ksw = SWkernel_map[mm, :, choose, :]
 
-    # Preallocation of arrays:
-    LWcld_tot = nanarray((12, 90, 144))
-    LWcld_amt = nanarray((12, 90, 144))
-    LWcld_alt = nanarray((12, 90, 144))
-    LWcld_tau = nanarray((12, 90, 144))
-    LWcld_err = nanarray((12, 90, 144))
-    SWcld_tot = nanarray((12, 90, 144))
-    SWcld_amt = nanarray((12, 90, 144))
-    SWcld_alt = nanarray((12, 90, 144))
-    SWcld_tau = nanarray((12, 90, 144))
-    SWcld_err = nanarray((12, 90, 144))
-    dc_star = nanarray((12, 7, LC, 90, 144))
-    dc_prop = nanarray((12, 7, LC, 90, 144))
+            # The following performs the amount/altitude/optical depth decomposition of
+            # Zelinka et al., J Climate (2012b), as modified in Zelinka et al., J. Climate (2013)
+            (LWcld_tot[mm, :], LWcld_amt[mm, :], LWcld_alt[mm, :], LWcld_tau[mm, :], LWcld_err[mm, :],
+             SWcld_tot[mm, :], SWcld_amt[mm, :], SWcld_alt[mm, :], SWcld_tau[mm, :], SWcld_err[mm, :], dc_star[mm, :], dc_prop[mm, :]) = \
+                KT_decomposition_4D(c1, c2, Klw, Ksw)
 
-    for mm in range(12):
-        dcld_dT = anomclisccp[mm, :, choose, :]
+        # Set the SW cloud feedbacks to zero in the polar night
+        # Do this since they may come out of previous calcs as undefined, but should be zero:
+        SWcld_tot[night] = 0
+        SWcld_amt[night] = 0
+        SWcld_alt[night] = 0
+        SWcld_tau[night] = 0
+        SWcld_err[night] = 0
 
-        c1 = avgclisccp1_grd[mm, :, choose, :]
-        c2 = c1 + dcld_dT
-        Klw = LWkernel_map[mm, :, choose, :]
-        Ksw = SWkernel_map[mm, :, choose, :]
+        # Sanity check: print global and annual mean cloud feedback components
+        AX = avgalbcs1_grd[0, :].getAxisList()
 
-        # The following performs the amount/altitude/optical depth decomposition of
-        # Zelinka et al., J Climate (2012b), as modified in Zelinka et al., J. Climate (2013)
-        (LWcld_tot[mm, :], LWcld_amt[mm, :], LWcld_alt[mm, :], LWcld_tau[mm, :], LWcld_err[mm, :],
-         SWcld_tot[mm, :], SWcld_amt[mm, :], SWcld_alt[mm, :], SWcld_tau[mm, :], SWcld_err[mm, :], dc_star[mm, :], dc_prop[mm, :]) = \
-            KT_decomposition_4D(c1, c2, Klw, Ksw)
+        # Plot Maps
+        # from mpl_toolkits.basemap import Basemap
+        lons = avgalbcs1_grd.getLongitude()[:]
+        lats = avgalbcs1_grd.getLatitude()[:]
+        LON, LAT = np.meshgrid(lons, lats)
 
-    # Set the SW cloud feedbacks to zero in the polar night
-    # Do this since they may come out of previous calcs as undefined, but should be zero:
-    SWcld_tot[night] = 0
-    SWcld_amt[night] = 0
-    SWcld_alt[night] = 0
-    SWcld_tau[night] = 0
-    SWcld_err[night] = 0
+        names_SW = ['SWcld_tot', 'SWcld_amt',
+                    'SWcld_alt', 'SWcld_tau', 'SWcld_err']
+        names_LW = ['LWcld_tot', 'LWcld_amt',
+                    'LWcld_alt', 'LWcld_tau', 'LWcld_err']
+        LW_feedbacks = [LWcld_tot, LWcld_amt, LWcld_alt, LWcld_tau, LWcld_err]
+        SW_feedbacks = [SWcld_tot, SWcld_amt, SWcld_alt, SWcld_tau, SWcld_err]
 
-    # Sanity check: print global and annual mean cloud feedback components
-    AX = avgalbcs1_grd[0, :].getAxisList()
+        list_LW, list_SW = [], []
 
-    # Plot Maps
-    # from mpl_toolkits.basemap import Basemap
-    lons = avgalbcs1_grd.getLongitude()[:]
-    lats = avgalbcs1_grd.getLatitude()[:]
-    LON, LAT = np.meshgrid(lons, lats)
+        for j in range(len(LW_feedbacks)):
+            da_lw = xr.DataArray.from_cdms2(LW_feedbacks[i])
+            da_sw = xr.DataArray.from_cdms2(SW_feedbacks[i])
 
-    names_SW = ['SWcld_tot', 'SWcld_amt',
-                'SWcld_alt', 'SWcld_tau', 'SWcld_err']
-    names_LW = ['LWcld_tot', 'LWcld_amt',
-                'LWcld_alt', 'LWcld_tau', 'LWcld_err']
-    LW_feedbacks = [LWcld_tot, LWcld_amt, LWcld_alt, LWcld_tau, LWcld_err]
-    SW_feedbacks = [SWcld_tot, SWcld_amt, SWcld_alt, SWcld_tau, SWcld_err]
+            da_lw.name = names_LW[j]
+            da_sw.name = names_SW[j]
 
-    list_LW, list_SW = [], []
+            da_lw = da_lw.rename(
+                {'axis_0': 'month', 'axis_1': 'lat', 'axis_2': 'lon'})
+            da_sw = da_sw.rename(
+                {'axis_0': 'month', 'axis_1': 'lat', 'axis_2': 'lon'})
 
-    for i in range(len(LW_feedbacks)):
-        da_lw = xr.DataArray.from_cdms2(LW_feedbacks[i])
-        da_sw = xr.DataArray.from_cdms2(SW_feedbacks[i])
+            da_lw['lon'] = lons
+            da_sw['lon'] = lons
 
-        da_lw.name = names_LW[i]
-        da_sw.name = names_SW[i]
+            da_lw['lat'] = lats
+            da_sw['lat'] = lats
 
-        da_lw = da_lw.rename(
-            {'axis_0': 'month', 'axis_1': 'lat', 'axis_2': 'lon'})
-        da_sw = da_sw.rename(
-            {'axis_0': 'month', 'axis_1': 'lat', 'axis_2': 'lon'})
+            da_lw['month'] = np.arange(1, 13, 1)
+            da_sw['month'] = np.arange(1, 13, 1)
 
-        da_lw['lon'] = lons
-        da_sw['lon'] = lons
+            list_LW.append(da_lw)
+            list_SW.append(da_sw)
 
-        da_lw['lat'] = lats
-        da_sw['lat'] = lats
-
-        da_lw['month'] = np.arange(1, 13, 1)
-        da_sw['month'] = np.arange(1, 13, 1)
-
-        list_LW.append(da_lw)
-        list_SW.append(da_sw)
-
-    ds_lw = xr.merge(list_LW)
-    ds_sw = xr.merge(list_SW)
-    # Directory to save files for _001 simulation
-    # os.mkdir('/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.001_global/atm/hist/COSP/cloud_feedbacks')
-    save_dir = '/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.001_global/atm/hist/COSP/cloud_feedbacks/'
-    ds_lw = ds_lw.assign_coords({'year': 1899})
-    ds_sw = ds_sw.assign_coords({'year': 1899})
-    ds_lw.to_netcdf(
-        save_dir + 'LW_cloud_feedbacks_' + sec + '_HIST_0.nc')
-    ds_sw.to_netcdf(
-        save_dir + 'SW_cloud_feedbacks_' + sec + '_HIST_0.nc')
+        ds_lw = xr.merge(list_LW)
+        ds_sw = xr.merge(list_SW)
+        # Directory to save files for _001 simulation
+        # os.mkdir('/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.001_global/atm/hist/COSP/cloud_feedbacks')
+        save_dir = '/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.001_global/atm/hist/COSP/cloud_feedbacks/'
+        ds_lw = ds_lw.assign_coords({'year': years[i - 1]})
+        ds_sw = ds_sw.assign_coords({'year': years[i - 1]})
+        ds_lw.to_netcdf(
+            save_dir + 'LW_cloud_feedbacks_' + sec + '_' + subdirs[i][:-1] + '.nc')
+        ds_sw.to_netcdf(
+            save_dir + 'SW_cloud_feedbacks_' + sec + '_' + subdirs[i][:-1] + '.nc')
 
     #
     # # LW
