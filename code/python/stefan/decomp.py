@@ -218,7 +218,7 @@ def KT_decomposition_4D(c1, c2, Klw, Ksw):
 direc = '/projects/NS9252K/noresm/cases/WP4_shofer/kernels/cloud-radiative-kernels/data/'
 
 # This is where all the model data lies
-main_dir = '/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.001_global/atm/hist/COSP/'
+main_dir = '/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.003_SH/atm/hist/COSP/'
 subdirs = ['PI/', 'HIST_0/',  'HIST_1/',  'HIST_2/',  'SSP_0/',  'SSP_1/']
 all_dirs = [main_dir + s for s in subdirs]
 years = [1899, 1949, 1999, 2049, 2100]
@@ -248,7 +248,7 @@ for i in range(1, 6):
 
     # Load in clisccp from control and perturbed simulation
     f = cdms.open(
-        all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.001_global.cam.h0.1399_FISCCP1.nc', 'r')
+        all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.003_SH.cam.h0.1349_FISCCP1.nc', 'r')
     clisccp1 = f('FISCCP1_COSP')
     f.close()
     f = cdms.open(
@@ -333,7 +333,7 @@ for i in range(1, 6):
 
     # Load surface air temperature
     f = cdms.open(
-        all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.001_global.cam.h0_TREFHT.nc', 'r')
+        all_dirs[0] + 'n.n202.N1850frc2.f09_tn14.pi_control.003_SH.cam.h0_TREFHT.nc', 'r')
     tas1 = f('TREFHT')
     f.close()
     f = cdms.open(
@@ -447,8 +447,8 @@ for i in range(1, 6):
         list_LW, list_SW = [], []
 
         for j in range(len(LW_feedbacks)):
-            da_lw = xr.DataArray.from_cdms2(LW_feedbacks[i])
-            da_sw = xr.DataArray.from_cdms2(SW_feedbacks[i])
+            da_lw = xr.DataArray.from_cdms2(LW_feedbacks[j])
+            da_sw = xr.DataArray.from_cdms2(SW_feedbacks[j])
 
             da_lw.name = names_LW[j]
             da_sw.name = names_SW[j]
@@ -474,7 +474,7 @@ for i in range(1, 6):
         ds_sw = xr.merge(list_SW)
         # Directory to save files for _001 simulation
         # os.mkdir('/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.001_global/atm/hist/COSP/cloud_feedbacks')
-        save_dir = '/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.001_global/atm/hist/COSP/cloud_feedbacks/'
+        save_dir = '/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.003_SH/atm/hist/COSP/cloud_feedbacks/'
         ds_lw = ds_lw.assign_coords({'year': years[i - 1]})
         ds_sw = ds_sw.assign_coords({'year': years[i - 1]})
         ds_lw.to_netcdf(
