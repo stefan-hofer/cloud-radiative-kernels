@@ -1,8 +1,8 @@
 import xarray as xr
 import glob
 
-main_dir = '/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.003_SH/atm/hist/COSP/'
-subdirs = ['HIST_0/',  'HIST_1/',  'HIST_2/',  'PI/',  'SSP_0/',  'SSP_1/']
+main_dir = '/projects/NS9252K/noresm/cases/WP4_shofer/n.n202.NSSP585frc2.f09_tn14.ssp585.004_BASE_end/atm/hist/COSP/'
+subdirs = ['PI/',  'SSP_0/',  'SSP_1/']
 all_dirs = [main_dir + s for s in subdirs]
 
 vars = ["FISCCP1_COSP", "TS", "TREFHT", "FSDSC", "FSNSC"]
