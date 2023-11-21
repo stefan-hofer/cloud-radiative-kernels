@@ -4,11 +4,12 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 from scipy import stats
+import matplotlib.pyplot as plt
 import matplotlib.path as mpath
 import cartopy.crs as ccrs
 import cartopy.feature
 import matplotlib.gridspec as gridspec
-import xesmf as xe
+
 
 import cartopy.feature as feat
 
